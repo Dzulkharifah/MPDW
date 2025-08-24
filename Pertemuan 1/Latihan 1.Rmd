@@ -1,1 +1,8 @@
+# Latihan 1 MPDW
 
+```{r}
+a=1
+a
+```
+
+![](images/Screenshot 2025-08-24 172055.png)
