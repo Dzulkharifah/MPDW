@@ -1,0 +1,344 @@
+---
+title: "MPDW P56"
+author: "Indah Dzulkharifah"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    self-contained: true
+---
+
+# Library
+
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(readxl)
+```
+
+# Import Data
+
+```{r}
+data <- read_excel("C:/Users/USER/OneDrive/Documents/Semester 5/MPDW/Indah (2).xlsx")
+data
+```
+
+## Mengubah Data agar Terbaca Sebagai Data Deret Waktu
+
+```{r}
+stas <- ts(data$temp_mean)
+```
+
+## Plot Time Series
+
+```{r}
+ts.plot(stas, xlab="Time Period ", ylab="Temperatur", 
+        main = "Time Series Plot")
+points(stas)
+```
+```{r}
+mean(stas)
+```
+
+```{r}
+lattice::densityplot(as.vector(stas))
+```
+
+Plot deret waktu di atas menunjukkan bahwa data stasioner dalam rataan,ditandai dengan data yang menyebar di sekitar nilai tengahnya (27) dan stasioner dalam ragam, ditandai dengan data berfluktuasi pada rentang yang relatif sama sepanjang waktu.
+
+## Plot ACF
+
+```{r}
+acf(stas)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut
+cenderung *tails off*.
+
+## Uji ADF
+
+Uji ADF (Augmented Dickey–Fuller) adalah uji statistik yang digunakan untuk memeriksa apakah suatu deret waktu stasioner dalam rataan.
+
+```{r}
+tseries::adf.test(stas)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.03 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa data **stasioner dalam rataan**. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+## Plot Box-Cox
+
+```{r}
+index <- seq(1:250)
+
+# Box-Cox
+bc <- boxcox(
+  stas ~ index,
+  lambda = seq(-1, 4, by = 0.01)
+)
+```
+```{r}
+# Nilai lambda optimum
+lambda <- bc$x[which.max(bc$y)]
+lambda
+```
+```{r}
+# Selang kepercayaan 95% untuk lambda
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+
+# Batas bawah dan batas atas
+ci_lower <- min(ci_lambda)
+ci_upper <- max(ci_lambda)
+
+c(Batas_Bawah = ci_lower, Batas_Atas = ci_upper)
+```
+
+Gambar di atas menunjukkan nilai λ optimum (rounded value) sebesar
+**-1** dan selang kepercayaan 95% nilai memiliki batas bawah **-1.00** dan batas atas **0.89**. Selang tersebut memuat nilai satu sehingga dapat dikatakan bahwa data bangkitan **stasioner dalam ragam**.
+
+> **Catatan:**\
+> Fungsi `boxcox()` di R tidak dapat digunakan langsung pada data yang
+> mengandung nilai nol atau negatif, meskipun hanya untuk tujuan
+> estimasi λ. Hal ini karena perhitungan log-likelihood dalam Box–Cox
+> mensyaratkan seluruh data bernilai positif.Jika dataset mengandung
+> nilai nol atau negatif, maka perlu ditambahkan suatu konstanta positif
+> pada seluruh data sehingga semua nilainya menjadi positif sebelum
+> dilakukan analisis Box–Cox.
+
+# Partisi Data Deret Waktu
+
+```{r}
+library(ggplot2)
+library(tsibble)
+
+plot_stas <- stas |> 
+  as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() +
+  theme_bw() +
+  xlab("Obs") + 
+  ylab("Nilai") +
+  
+  # Tambahkan garis batas
+  geom_vline(xintercept = 80, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = 168, linetype = "dashed", color = "blue") +
+  ggtitle("Partisi Deret Waktu:")
+
+plot_stas
+```
+
+## Bagian 1 : Observasi 1-80
+
+```{r}
+dt_stas1 <- stas[1:80] |> ts()
+
+#rata-rata
+mean(dt_stas1)
+```
+
+```{r}
+#varians
+var(dt_stas1)
+```
+### Plot Time Series
+
+```{r}
+dt_stas1 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() + theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+```
+
+Plot time series menunjukkan bahwa data tidak stasioner pada rataan karena terdapat pola perubahan rata-rata seiring waktu, yaitu nilai awal relatif lebih rendah dibandingkan nilai pada periode akhir. Plot time series menunjukkan data stasioner dalam ragam, ditandai dengan data berfluktuasi pada rentang yang relatif sama sepanjang waktu.
+
+
+### Plot ACF
+
+```{r}
+acf(dt_stas1)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut cenderung *tails off* dan membentuk gelombang sinus.
+
+### Uji ADF
+
+```{r}
+tseries::adf.test(dt_stas1)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* lebih besar dari taraf nyata 5% sehingga gagal tolak $H_0$ dan menandakan bahwa **data tidak stasioner dalam rataan**. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+### Plot Box-cox
+
+```{r}
+index <- seq(1, 80)
+
+# Box-Cox
+bc <- boxcox(
+  dt_stas1 ~ index,
+  lambda = seq(-2, 6, by = 0.01)
+)
+```
+```{r}
+# Nilai lambda optimum (dibulatkan)
+lambda <- bc$x[which.max(bc$y)]
+lambda
+```
+
+```{r}
+# Selang kepercayaan 95% untuk lambda
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+
+# Batas bawah dan batas atas
+ci_lower <- min(ci_lambda)
+ci_upper <- max(ci_lambda)
+
+c(Batas_Bawah = ci_lower, Batas_Atas = ci_upper)
+```
+
+Gambar di atas menunjukkan nilai λ optimum (rounded value) sebesar **0.42** dan selang kepercayaan 95% nilai memiliki batas bawah **-2** dan batas atas **6**. Selang tersebut memuat nilai satu sehingga dapat dikatakan bahwa data bangkitan **stasioner dalam ragam**.
+
+### Differencing
+
+Dalam analisis deret waktu, differencing merupakan salah satu prosedur transformasi yang digunakan untuk memperoleh sifat stasioneritas dalam rataan. Metode ini dilakukan dengan menghitung selisih nilai observasi antar periode sehingga pola tren atau ketidakstasioneran dalam rataan dapat dieliminasi.
+
+Secara umum, pembedaan pertama ditulis sebagai:
+
+$$
+\nabla Y_t = Y_t - Y_{t-1}
+$$
+
+Jika tren linier masih tersisa/ belum stasioner, dapat dilakukan differencing kedua:\
+
+$$
+\nabla^2 Y_t = \nabla (\nabla Y_t) = Y_t - 2Y_{t-1} + Y_{t-2}
+$$
+
+Dengan cara ini, data yang awalnya tidak stasioner dapat ditransformasi menjadi stasioner sehingga bisa digunakan dalam pemodelan. Di dalam **R**, proses differencing dapat dilakukan dengan fungsi:
+
+-   `diff(y, differences = 1)` → untuk differencing pertama.
+-   `diff(y, differences = 2)` → untuk differencing kedua.
+
+```{r}
+dt_stas1_diff1 <- diff(dt_stas1, differences = 1)
+
+ts.plot(dt_stas1_diff1,
+        main = "First-order Differencing dari postrend",
+        col = "blue", lwd = 2)
+```
+
+#### Plot ACF
+
+```{r}
+acf(dt_stas1_diff1)
+```
+
+#### Uji ADF
+
+```{r}
+tseries::adf.test(dt_stas1_diff1)
+```
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa **data sudah stasioner dalam rataan**. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+## Bagian 2 : Observasi Data 1-168
+
+```{r}
+dt_stas2 <- stas[1:168] |> ts()
+mean(dt_stas2)
+```
+```{r}
+var(dt_stas2)
+```
+
+### Plot Time Series
+
+```{r}
+dt_stas2 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() + theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+```
+
+Plot time series menunjukkan bahwa data tidak stasioner pada rataan karena terdapat pola perubahan rata-rata seiring waktu, yaitu nilai awal relatif lebih rendah dibandingkan nilai pada periode akhir. Plot time series menunjukkan data stasioner dalam ragam, ditandai dengan data berfluktuasi pada rentang yang relatif sama sepanjang waktu.
+
+### Plot ACF
+
+```{r}
+acf(dt_stas2)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut cenderung *tails off*
+
+### Plot ADF
+
+```{r}
+adf.test(dt_stas2)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* lebih besar dari taraf nyata 5% sehingga gagal tolak $H_0$ dan menandakan bahwa **data tidak stasioner dalam rataan**. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+### Plot Box-Cox
+
+```{r}
+index <- seq(1, 168)
+
+# Box-Cox
+bc <- boxcox(
+  dt_stas2 ~ index,
+  lambda = seq(0, 6, by = 0.01)
+)
+```
+
+```{r}
+# Nilai lambda optimum
+lambda <- bc$x[which.max(bc$y)]
+lambda
+```
+```{r}
+# Selang kepercayaan 95% untuk lambda
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+
+# Batas bawah dan batas atas
+ci_lower <- min(ci_lambda)
+ci_upper <- max(ci_lambda)
+
+c(Batas_Bawah = ci_lower, Batas_Atas = ci_upper)
+```
+Gambar di atas menunjukkan nilai λ optimum (rounded value) sebesar **1.57** dan selang kepercayaan 95% nilai memiliki batas bawah **00.00** dan batas atas **5.96**. Selang tersebut memuat nilai satu sehingga dapat dikatakan bahwa data bangkitan **stasioner dalam ragam**.
+
+### Differencing
+
+```{r}
+dt_stas2_diff1 <- diff(dt_stas2, differences = 1)
+
+ts.plot(dt_stas2_diff1,
+        main = "First-order Differencing dari postrend",
+        col = "blue", lwd = 2)
+```
+
+#### Plot ACF
+
+```{r}
+acf(dt_stas2_diff1)
+```
+
+#### Uji ADF
+
+```{r}
+tseries::adf.test(dt_stas2_diff1)
+```
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa **data sudah stasioner dalam rataan**. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF
+
